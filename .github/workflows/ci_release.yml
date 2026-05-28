@@ -1,19 +1,128 @@
-name: "CI: Release"
+name: Release
+run-name: Release ${{ inputs.version }}
 
 "on":
-  push:
-    tags:
-      - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Full release tag to create, for example `v1.2.3`.
+        required: true
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  to-do:
-    name: TODO
+  verify-tag:
+    name: Verify tag syntax
     runs-on: ubuntu-latest
+    outputs:
+      full_tag: ${{ steps.version.outputs.full_tag }}
+      major_tag: ${{ steps.version.outputs.major_tag }}
+      minor_tag: ${{ steps.version.outputs.minor_tag }}
     steps:
-      - name: Hello world
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Validate release inputs
+        id: version
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          echo "Hello world"
+          version_json="$(node ./tools/release/validate-release-version.mjs "$INPUT_VERSION" "$REF_NAME" "$DEFAULT_BRANCH")"
+          {
+            echo "full_tag=$(jq -r '.fullTag' <<< "$version_json")"
+            echo "major_tag=$(jq -r '.majorTag' <<< "$version_json")"
+            echo "minor_tag=$(jq -r '.minorTag' <<< "$version_json")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Ensure full release tag does not already exist
+        shell: bash
+        env:
+          FULL_TAG: ${{ steps.version.outputs.full_tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$FULL_TAG" >/dev/null 2>&1; then
+            echo "tag '$FULL_TAG' already exists on origin" >&2
+            exit 1
+          fi
+
+  unit-test-lint:
+    uses: ./.github/workflows/ci_unit-test-lint.yml
+
+  live:
+    name: Run live tests
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/test_live-untag-all-matrix.yml
+    secrets: inherit
+
+  release:
+    name: Create release ${{ inputs.version }}
+    needs:
+      - verify-tag
+      - unit-test-lint
+      - live
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create detached release commit and tags
+        id: detached
+        shell: bash
+        env:
+          FULL_TAG: ${{ needs.verify-tag.outputs.full_tag }}
+          MAJOR_TAG: ${{ needs.verify-tag.outputs.major_tag }}
+          MINOR_TAG: ${{ needs.verify-tag.outputs.minor_tag }}
+        run: |
+          ./tools/release/create-detached-release-tags.sh "$FULL_TAG" "$MAJOR_TAG" "$MINOR_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Push release tags
+        shell: bash
+        env:
+          FULL_TAG: ${{ needs.verify-tag.outputs.full_tag }}
+          MAJOR_TAG: ${{ needs.verify-tag.outputs.major_tag }}
+          MINOR_TAG: ${{ needs.verify-tag.outputs.minor_tag }}
+        run: |
+          set -euo pipefail
+          git push origin "refs/tags/$FULL_TAG"
+          git push --force origin "refs/tags/$MAJOR_TAG" "refs/tags/$MINOR_TAG"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FULL_TAG: ${{ needs.verify-tag.outputs.full_tag }}
+        run: gh release create "$FULL_TAG" --verify-tag --title "$FULL_TAG" --generate-notes
