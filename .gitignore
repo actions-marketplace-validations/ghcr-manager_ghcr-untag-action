@@ -1,0 +1,7 @@
+dist/
+.bundle-tmp/
+node_modules/
+tests/*.js
+tests/*.js.map
+/coverage/
+.idea/

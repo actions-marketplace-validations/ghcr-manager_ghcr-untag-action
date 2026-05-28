@@ -1,0 +1,23 @@
+name: GHCR Untag Action
+description: Remove one or more tags from a GHCR container package.
+
+branding:
+  icon: package
+  color: blue
+
+inputs:
+  token:
+    description: GitHub token with package read/write permissions.
+    required: true
+  owner:
+    description: GHCR package owner.
+    required: true
+  package:
+    description: GHCR package name.
+    required: true
+  tags:
+    description: Newline-separated tags to remove.
+    required: true
+runs:
+  using: node24
+  main: dist/index.js

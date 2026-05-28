@@ -1,0 +1,19 @@
+name: "CI: Release"
+
+"on":
+  push:
+    tags:
+      - "*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  to-do:
+    name: TODO
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hello world
+        run: |
+          set -euo pipefail
+          echo "Hello world"

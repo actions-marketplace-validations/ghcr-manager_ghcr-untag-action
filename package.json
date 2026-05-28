@@ -1,0 +1,42 @@
+{
+  "name": "@ghcr-manager/ghcr-untag-action",
+  "private": true,
+  "version": "0.0.0-dev",
+  "description": "GitHub Action for removing tags from GHCR package versions.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "rm -rf dist .bundle-tmp && tsc --project tsconfig.json --outDir .bundle-tmp && ncc build .bundle-tmp/index.js -o dist --license licenses.txt && rm -rf .bundle-tmp",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "npm run check:file-names && npm run check:test-mapping && npm run typecheck && npm run lint:ts && npm run lint:yaml && npm run lint:markdown && npm run format:check",
+    "check:file-names": "node tools/tests/check-src-file-names.mjs",
+    "check:test-mapping": "node tools/tests/check-test-mapping.mjs",
+    "lint:ts": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "lint:yaml": "eslint \".github/**/*.yml\" \"*.yml\"",
+    "lint:markdown": "markdownlint-cli2",
+    "typecheck": "tsc --noEmit --project tsconfig.test.json",
+    "test": "node --import tsx --test",
+    "coverage": "c8 --src src --reporter=text --reporter=text-summary node --import tsx --test"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.4",
+    "c8": "^11.0.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-yml": "^3.3.2",
+    "globals": "^17.6.0",
+    "markdownlint-cli2": "^0.22.1",
+    "prettier": "^3.8.3",
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.46.2",
+    "yaml": "^2.9.0"
+  }
+}
