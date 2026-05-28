@@ -1,0 +1,94 @@
+name: "Test: Live Untag Executor"
+run-name: Test Live Untag Executor (${{ inputs.scenario }})
+
+"on":
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Live untag scenario package to seed, untag, and verify.
+        required: true
+        default: untag-image-manifest-multiple-tags
+        type: choice
+        options:
+          - untag-image-manifest-multiple-tags
+          - untag-image-manifest-single-tag
+          - untag-single-platform-index-multiple-tags
+          - untag-single-platform-index-single-tag
+          - untag-artifact-manifest-multiple-tags
+          - untag-artifact-manifest-single-tag
+      owner:
+        description: Exact package owner name to seed and mutate.
+        required: true
+        default: ""
+        type: string
+  workflow_call:
+    inputs:
+      scenario:
+        required: true
+        type: string
+      owner:
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  setup:
+    name: Setup ${{ inputs.owner }}/${{ inputs.scenario }}
+    uses: ./.github/workflows/test_setup-live-untag-scenario.yml
+    secrets: inherit
+    with:
+      owner: ${{ inputs.owner }}
+      scenario: ${{ inputs.scenario }}
+
+  execute:
+    name: Test ${{ inputs.owner }}/${{ inputs.scenario }}
+    needs: setup
+    runs-on: ubuntu-latest
+    concurrency:
+      group: untag-action__live__${{ inputs.owner }}__${{ inputs.scenario }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+
+      - name: Build action
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+
+      - name: Run standalone untag action
+        uses: ./
+        with:
+          token: ${{ secrets.GH_TEST_PAT }}
+          owner: ${{ needs.setup.outputs.owner }}
+          package: ${{ needs.setup.outputs.package_name }}
+          tags: ${{ needs.setup.outputs.delete_tags }}
+
+      - name: Assert live untag result
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TEST_PAT }}
+          OWNER: ${{ needs.setup.outputs.owner }}
+          PACKAGE: ${{ needs.setup.outputs.package_name }}
+          KEEP_TAG: ${{ needs.setup.outputs.keep_tag }}
+          DELETE_TAGS: ${{ needs.setup.outputs.delete_tags }}
+        run: |
+          set -euo pipefail
+          delete_tag="$(printf '%s\n' "$DELETE_TAGS" | head -n 1)"
+          node tools/tests/assert-live-untag-tags.mjs "$OWNER" "$PACKAGE" "$GITHUB_TOKEN" "$KEEP_TAG" "$delete_tag"

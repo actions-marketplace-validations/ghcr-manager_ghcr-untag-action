@@ -1,0 +1,52 @@
+name: "Test: Live Untag All Matrix"
+run-name: Test Live Untag All Matrix
+
+"on":
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    name: Prepare JSON matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Require test owner configuration
+        shell: bash
+        env:
+          GH_TEST_ORG: ${{ vars.GH_TEST_ORG }}
+          GH_TEST_PAT_USERNAME: ${{ vars.GH_TEST_PAT_USERNAME }}
+        run: |
+          set -euo pipefail
+          [[ -n "$GH_TEST_ORG" ]] || { echo "Missing repo variable GH_TEST_ORG" >&2; exit 1; }
+          [[ -n "$GH_TEST_PAT_USERNAME" ]] || { echo "Missing repo variable GH_TEST_PAT_USERNAME" >&2; exit 1; }
+
+      - name: Render live untag all matrix
+        id: matrix
+        shell: bash
+        env:
+          GH_TEST_ORG: ${{ vars.GH_TEST_ORG }}
+          GH_TEST_PAT_USERNAME: ${{ vars.GH_TEST_PAT_USERNAME }}
+        run: |
+          set -euo pipefail
+          echo "matrix=$(node tools/tests/render-live-untag-owner-matrix.mjs all "$GH_TEST_ORG" "${GH_TEST_PAT_USERNAME,,}")" >> "$GITHUB_OUTPUT"
+
+  execute:
+    name: Execute tests in JSON matrix
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    uses: ./.github/workflows/test_live-untag.yml
+    secrets: inherit
+    with:
+      owner: ${{ matrix.owner }}
+      scenario: ${{ matrix.scenario }}

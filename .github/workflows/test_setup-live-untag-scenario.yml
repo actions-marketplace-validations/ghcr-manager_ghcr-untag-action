@@ -1,0 +1,140 @@
+name: "Test: Setup Live Untag Scenario"
+run-name: Test Setup Live Untag Scenario (${{ inputs.scenario }})
+
+"on":
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: Exact package owner name to seed.
+        required: true
+        default: ""
+        type: string
+      scenario:
+        description: Live untag scenario package to clear and seed.
+        required: true
+        default: untag-image-manifest-multiple-tags
+        type: choice
+        options:
+          - untag-image-manifest-multiple-tags
+          - untag-image-manifest-single-tag
+          - untag-single-platform-index-multiple-tags
+          - untag-single-platform-index-single-tag
+          - untag-artifact-manifest-multiple-tags
+          - untag-artifact-manifest-single-tag
+  workflow_call:
+    inputs:
+      owner:
+        required: false
+        default: ""
+        type: string
+      scenario:
+        required: true
+        type: string
+    outputs:
+      owner:
+        description: Resolved package owner.
+        value: ${{ jobs.setup.outputs.owner }}
+      package_name:
+        description: Seeded package name.
+        value: ${{ jobs.setup.outputs.package_name }}
+      image_ref:
+        description: Seeded image reference.
+        value: ${{ jobs.setup.outputs.image_ref }}
+      keep_tag:
+        description: Tag expected to remain after untag.
+        value: ${{ jobs.setup.outputs.keep_tag }}
+      delete_tags:
+        description: Newline-separated tags to remove.
+        value: ${{ jobs.setup.outputs.delete_tags }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  setup:
+    name: Setup ${{ inputs.owner }}/${{ inputs.scenario }}
+    runs-on: ubuntu-latest
+    outputs:
+      owner: ${{ steps.resolve.outputs.owner }}
+      package_name: ${{ steps.resolve.outputs.package_name }}
+      image_ref: ${{ steps.resolve.outputs.image_ref }}
+      keep_tag: ${{ steps.resolve.outputs.keep_tag }}
+      delete_tags: ${{ steps.resolve.outputs.delete_tags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Require test owner configuration
+        shell: bash
+        env:
+          GH_TEST_PAT_USERNAME: ${{ vars.GH_TEST_PAT_USERNAME }}
+          GH_TEST_PAT: ${{ secrets.GH_TEST_PAT }}
+        run: |
+          set -euo pipefail
+          [[ -n "$GH_TEST_PAT_USERNAME" ]] || { echo "Missing repo variable GH_TEST_PAT_USERNAME" >&2; exit 1; }
+          [[ -n "$GH_TEST_PAT" ]] || { echo "Missing repo secret GH_TEST_PAT" >&2; exit 1; }
+
+      - name: Resolve scenario
+        id: resolve
+        shell: bash
+        env:
+          OWNER: ${{ inputs.owner }}
+          SCENARIO: ${{ inputs.scenario }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          [[ -n "$OWNER" ]] || { echo "input 'owner' is required" >&2; exit 1; }
+          scenario_json="$(node tools/tests/resolve-live-untag-scenario.mjs "$OWNER" "$SCENARIO" "$REPOSITORY_NAME")"
+          {
+            echo "owner=$(jq -r '.owner' <<< "$scenario_json")"
+            echo "package_name=$(jq -r '.packageName' <<< "$scenario_json")"
+            echo "image_ref=$(jq -r '.imageRef' <<< "$scenario_json")"
+            echo "keep_tag=$(jq -r '.tagNames.keepTag' <<< "$scenario_json")"
+            echo "seed_strategy=$(jq -r '.seedStrategy' <<< "$scenario_json")"
+            echo "delete_tags<<EOF"
+            jq -r '.deleteTags[]?' <<< "$scenario_json"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Clear scenario package
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TEST_PAT }}
+          OWNER: ${{ steps.resolve.outputs.owner }}
+          PACKAGE: ${{ steps.resolve.outputs.package_name }}
+        run: |
+          set -euo pipefail
+          node tools/tests/delete-ghcr-package.mjs "$OWNER" "$PACKAGE" "$GITHUB_TOKEN"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ vars.GH_TEST_PAT_USERNAME }}
+          password: ${{ secrets.GH_TEST_PAT }}
+
+      - name: Set up ORAS
+        if: ${{ startsWith(steps.resolve.outputs.seed_strategy, 'artifact-manifest-') }}
+        shell: bash
+        env:
+          ORAS_VERSION: 1.2.3
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+            -o /tmp/oras.tgz
+          tar -xzf /tmp/oras.tgz -C /tmp oras
+          install /tmp/oras /usr/local/bin/oras
+          oras version
+
+      - name: Seed live untag scenario package
+        shell: bash
+        env:
+          IMAGE_REF: ${{ steps.resolve.outputs.image_ref }}
+          KEEP_TAG: ${{ steps.resolve.outputs.keep_tag }}
+          DELETE_TAGS: ${{ steps.resolve.outputs.delete_tags }}
+          SEED_STRATEGY: ${{ steps.resolve.outputs.seed_strategy }}
+        run: |
+          set -euo pipefail
+          delete_tag="$(printf '%s\n' "$DELETE_TAGS" | head -n 1)"
+          ./tools/tests/seed-live-untag-scenario.sh "$SEED_STRATEGY" "$IMAGE_REF" "$KEEP_TAG" "$delete_tag"
