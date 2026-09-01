@@ -12,9 +12,13 @@ updates:
       github-actions:
         patterns:
           - "*"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "npm"
-    directory: "/"
+    directories:
+      - "/"
+      - "/*"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
@@ -24,8 +28,13 @@ updates:
       npm:
         patterns:
           - "*"
+    cooldown:
+      default-days: 7
     ignore:
       # ignore to keep in sync with node24 used by GH runners
       - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
+      # ignore until ESLint supports TS 7
+      - dependency-name: "typescript"
+        versions: [">=7"]

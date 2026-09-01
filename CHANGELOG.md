@@ -7,6 +7,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [v1.0.9] - 2026-08-07
+
+### Added
+
+- Add a dedicated MegaLinter CI workflow for repository linting and security checks.
+
+### Changed
+
+- Harden GitHub Actions workflow permissions and secret handling for the live test and release jobs.
+- Run workflow linting against a built action bundle while excluding generated `dist/` files from source linters.
+
+## [v1.0.8] - 2026-08-07
+
+### Changed
+
+- Bump the npm build and development toolchain dependencies, including `c8`, `eslint`, `globals`, `js-yaml`,
+  `markdownlint-cli2`, `prettier`, `typescript-eslint`, and `undici`.
+- Refresh pinned GitHub Actions workflow dependencies, including `actions/checkout`, `docker/login-action`, and
+  `tcort/github-action-markdown-link-check`.
+- Refresh transitive npm packages in `package-lock.json` to address dependency vulnerabilities.
+
+## [v1.0.7] - 2026-07-23
+
+### Changed
+
+- Bump the npm build and development toolchain dependencies, including `@vercel/ncc`, `@types/node`, `eslint`,
+  `eslint-plugin-yml`, `globals`, `markdownlint-cli2`, `prettier`, `tsx`, and `typescript-eslint`.
+- Keep `typescript` pinned to `6.0.3` until the ESLint toolchain supports TypeScript 7.
+
+## [v1.0.6] - 2026-06-14
+
+### Changed
+
+- Bump the npm build and development toolchain dependencies, including `esbuild`, `@vercel/ncc`, `typescript-eslint`,
+  `prettier`, and `@types/node`.
+
+## [v1.0.5] - 2026-06-07
+
+### Changed
+
+- Clarify in the README that untagging keeps existing package timestamps in place.
+- Bump the npm build and development toolchain dependencies.
+
 ## [1.0.4] - 2026-05-30
 
 ### Changed
