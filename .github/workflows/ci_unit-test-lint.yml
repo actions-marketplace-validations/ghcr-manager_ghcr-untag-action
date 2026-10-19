@@ -22,14 +22,14 @@ jobs:
           persist-credentials: false
 
       - name: Ensure workflow actions use immutable refs
-        uses: joshjohanning/ensure-immutable-actions@9f5dad6bb6148bd29ff0d874de6a8cc70af08fa9 # v2.6.2
+        uses: joshjohanning/ensure-immutable-actions@aaa3ba61b950ead2be895ea36a561a5eb11dd82b # v2.7.2
         with:
           include-first-party: "true"
           write-job-summary: "on-failure-only"
           exclude-workflows: ".github/workflows/test_live-untag.yml"
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
